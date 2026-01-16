@@ -12,5 +12,5 @@
   <rect x="120" y="146" width="102" height="12" rx="6" fill="#FFE0B2" />
   <rect x="120" y="172" width="74" height="12" rx="6" fill="#FFE0B2" />
   <text x="270" y="170" font-family="Lexend, Arial, sans-serif" font-size="34" font-weight="700" fill="#BF360C">Medical Review</text>
-  <text x="270" y="210" font-family="Lexend, Arial, sans-serif" font-size="18" fill="#E65100">Documents + checkup</text>
+  <text x="270" y="210" font-family="Lexend, Arial, sans-serif" font-size="18" fill="#E65100">Documents + Revisión</text>
 </svg>
