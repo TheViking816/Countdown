@@ -896,58 +896,58 @@ const App = () => {
   const [milestones, setMilestones] = useState<Milestone[]>([]);
   const [theme, setTheme] = useLocalStorage<ThemeMode>(STORAGE_KEYS.THEME, "system");
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    const migrateAndSubscribe = async () => {
-      // 1. Check for migration
-      const migrationFlag = localStorage.getItem('firebase_migrated_v_final');
+    // Verify configuration
+    if (!firebaseConfig.apiKey) {
+      setError("No se encontraron las claves de configuración de Firebase en el entorno.");
+      setLoading(false);
+      return;
+    }
+
+    // 1. Subscribe to Firestore immediately
+    const q = query(collection(db, 'milestones'), orderBy('datetimeISO', 'asc'));
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const ms = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      })) as Milestone[];
+      setMilestones(ms);
+      setLoading(false);
+    }, (err) => {
+      console.error("Firestore snapshot error:", err);
+      // Only set error if we don't have any milestones yet (persistent cache might have some)
+      setError("Error de permisos o de conexión con Firebase. Revisa las reglas de seguridad.");
+      setLoading(false);
+    });
+
+    // 2. Background migration (non-blocking)
+    const handleMigration = async () => {
+      const migrationFlag = localStorage.getItem('firebase_migrated_v_final_3');
       if (!migrationFlag) {
         const localData = localStorage.getItem(STORAGE_KEYS.MILESTONES);
         if (localData) {
           try {
             const parsed = JSON.parse(localData);
             if (Array.isArray(parsed) && parsed.length > 0) {
+              console.log("Iniciando migración de datos locales...");
               for (const m of parsed) {
                 const { id, ...data } = m;
                 await addDoc(collection(db, 'milestones'), data);
               }
+              console.log("Migración completada con éxito.");
             }
           } catch (e) {
             console.error("Migration error:", e);
           }
         }
-        localStorage.setItem('firebase_migrated_v_final', 'true');
+        localStorage.setItem('firebase_migrated_v_final_3', 'true');
       }
-
-      // 2. Subscribe to Firestore
-      const q = query(collection(db, 'milestones'), orderBy('datetimeISO', 'asc'));
-      const unsubscribe = onSnapshot(q, (snapshot) => {
-        const ms = snapshot.docs.map(doc => ({
-          id: doc.id,
-          ...doc.data()
-        })) as Milestone[];
-        setMilestones(ms);
-        setLoading(false);
-      }, (error) => {
-        console.error("Firestore snapshot error:", error);
-        setLoading(false);
-      });
-
-      return unsubscribe;
     };
+    handleMigration();
 
-    let unsubscribe: (() => void) | undefined;
-
-    migrateAndSubscribe().then(unsub => {
-      unsubscribe = unsub;
-    }).catch(err => {
-      console.error("Initialization error:", err);
-      setLoading(false);
-    });
-
-    return () => {
-      if (unsubscribe) unsubscribe();
-    };
+    return () => unsubscribe();
   }, []);
 
   const toggleComplete = useCallback(async (id: string) => {
@@ -967,7 +967,26 @@ const App = () => {
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-[#FDFCFB] dark:bg-[#1A1C1E]">
-        <div className="animate-pulse text-[#D84315] font-bold">Cargando eventos...</div>
+        <div className="flex flex-col items-center gap-4">
+          <div className="w-12 h-12 border-4 border-[#D84315] border-t-transparent rounded-full animate-spin" />
+          <div className="text-[#D84315] font-bold animate-pulse">Cargando eventos...</div>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center p-8 bg-[#FDFCFB] dark:bg-[#1A1C1E] text-center">
+        <Icon name="timer" className="w-16 h-16 text-red-500 mb-6" />
+        <h2 className="text-xl font-bold mb-2">Ups, algo ha salido mal</h2>
+        <p className="text-gray-500 dark:text-gray-400 mb-8 max-w-xs">{error}</p>
+        <button
+          onClick={() => window.location.reload()}
+          className="bg-[#D84315] text-white px-8 py-3 rounded-2xl font-bold shadow-lg shadow-[#D84315]/20"
+        >
+          Reintentar conexión
+        </button>
       </div>
     );
   }
