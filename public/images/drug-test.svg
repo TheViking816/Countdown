@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="640" height="360" viewBox="0 0 640 360">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#E0F7FA" />
+      <stop offset="100%" stop-color="#B2EBF2" />
+    </linearGradient>
+  </defs>
+  <rect width="640" height="360" rx="32" fill="url(#bg)" />
+  <circle cx="120" cy="120" r="56" fill="#006064" opacity="0.12" />
+  <circle cx="520" cy="240" r="88" fill="#00838F" opacity="0.12" />
+  <rect x="88" y="96" width="120" height="168" rx="24" fill="#006064" />
+  <rect x="112" y="72" width="72" height="40" rx="16" fill="#004D40" />
+  <rect x="116" y="132" width="64" height="16" rx="8" fill="#E0F2F1" />
+  <rect x="116" y="160" width="64" height="16" rx="8" fill="#E0F2F1" />
+  <rect x="116" y="188" width="64" height="16" rx="8" fill="#E0F2F1" />
+  <text x="240" y="170" font-family="Lexend, Arial, sans-serif" font-size="36" font-weight="700" fill="#004D40">Drug Test</text>
+  <text x="240" y="210" font-family="Lexend, Arial, sans-serif" font-size="18" fill="#006064">Lab appointment</text>
+</svg>
