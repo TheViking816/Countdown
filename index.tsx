@@ -1,13 +1,38 @@
-
+/// <reference types="vite/client" />
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { createRoot } from 'react-dom/client';
-import { 
-  HashRouter as Router, 
-  Routes, 
-  Route, 
-  Link, 
+import {
+  HashRouter as Router,
+  Routes,
+  Route,
+  Link,
   useLocation
 } from 'react-router-dom';
+import { initializeApp } from 'firebase/app';
+import {
+  getFirestore,
+  collection,
+  onSnapshot,
+  addDoc,
+  updateDoc,
+  deleteDoc,
+  doc,
+  query,
+  orderBy,
+  Timestamp
+} from 'firebase/firestore';
+
+const firebaseConfig = {
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+  appId: import.meta.env.VITE_FIREBASE_APP_ID
+};
+
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
 
 /** 
  * TYPES 
@@ -324,23 +349,38 @@ const ThemeProvider = ({ children }: { children?: React.ReactNode }) => {
 };
 
 // Fix: Make children optional to avoid missing property error
-const ProgressCircle = ({ percentage, children }: { percentage: number, children?: React.ReactNode }) => {
-  const radius = 90;
+const ProgressCircle = ({
+  percentage,
+  children,
+  size = 256,
+  strokeWidth = 10,
+  color = "#D84315",
+  darkColor = "#FF8A65"
+}: {
+  percentage: number,
+  children?: React.ReactNode,
+  size?: number,
+  strokeWidth?: number,
+  color?: string,
+  darkColor?: string
+}) => {
+  const radius = (size / 2) - strokeWidth;
   const circumference = 2 * Math.PI * radius;
   const strokeDashoffset = circumference - (percentage / 100) * circumference;
 
   return (
-    <div className="relative flex items-center justify-center w-64 h-64 mx-auto">
+    <div className="relative flex items-center justify-center mx-auto" style={{ width: size, height: size }}>
       <svg className="w-full h-full transform -rotate-90">
         <circle
           cx="50%" cy="50%" r={radius}
           className="stroke-current text-gray-200 dark:text-gray-800"
-          strokeWidth="10" fill="transparent"
+          strokeWidth={strokeWidth} fill="transparent"
         />
         <circle
           cx="50%" cy="50%" r={radius}
-          className="stroke-current text-[#D84315] dark:text-[#FF8A65] transition-all duration-1000 ease-out"
-          strokeWidth="10" fill="transparent"
+          className="transition-all duration-1000 ease-out"
+          style={{ stroke: color }}
+          strokeWidth={strokeWidth} fill="transparent"
           strokeDasharray={circumference}
           strokeDashoffset={strokeDashoffset}
           strokeLinecap="round"
@@ -367,15 +407,14 @@ const Layout = ({ children }: { children?: React.ReactNode }) => {
       <main className="flex-1 p-6 overflow-y-auto">
         {children}
       </main>
-      
+
       <nav className="fixed bottom-0 left-0 right-0 max-w-md mx-auto bg-white/80 dark:bg-[#1A1C1E]/80 backdrop-blur-md border-t border-gray-100 dark:border-gray-800 px-6 py-4 flex justify-around items-center z-50 rounded-t-3xl shadow-lg">
         {navItems.map((item) => (
-          <Link 
-            key={item.path} 
-            to={item.path} 
-            className={`flex flex-col items-center gap-1 transition-colors ${
-              location.pathname === item.path ? 'text-[#D84315]' : 'text-gray-400'
-            }`}
+          <Link
+            key={item.path}
+            to={item.path}
+            className={`flex flex-col items-center gap-1 transition-colors ${location.pathname === item.path ? 'text-[#D84315]' : 'text-gray-400'
+              }`}
             aria-label={item.label}
           >
             <Icon name={item.icon as IconName} className="w-6 h-6" />
@@ -384,6 +423,33 @@ const Layout = ({ children }: { children?: React.ReactNode }) => {
         ))}
       </nav>
     </div>
+  );
+};
+
+const MilestoneCircle = ({ milestone }: { milestone: Milestone }) => {
+  const { days, hours, minutes, seconds, isPast, totalMs } = useCountdown(milestone.datetimeISO);
+
+  const percentage = useMemo(() => {
+    const start = new Date(milestone.createdAt).getTime();
+    const end = new Date(milestone.datetimeISO).getTime();
+    const total = end - start;
+    if (total <= 0) return 100;
+    const elapsed = total - totalMs;
+    return Math.min(100, Math.max(0, (elapsed / total) * 100));
+  }, [milestone, totalMs]);
+
+  return (
+    <ProgressCircle
+      percentage={percentage}
+      size={40}
+      strokeWidth={3}
+      color={isPast ? "#FF8A65" : "#D84315"}
+    >
+      <Icon
+        name={milestone.status === 'completed' ? 'check' : milestone.icon}
+        className={`w-4 h-4 ${milestone.status === 'completed' ? 'text-green-500' : ''}`}
+      />
+    </ProgressCircle>
   );
 };
 
@@ -411,30 +477,58 @@ const CountdownDisplay = ({ targetDate }: { targetDate: string }) => {
 };
 
 const Dashboard = ({ milestones, toggleComplete }: { milestones: Milestone[], toggleComplete: (id: string) => void }) => {
-  const activeMilestone = useMemo(() => {
-    const future = milestones
-      .filter(m => m.status !== 'completed' && new Date(m.datetimeISO).getTime() > Date.now())
-      .sort((a, b) => new Date(a.datetimeISO).getTime() - new Date(b.datetimeISO).getTime());
-    return future[0] || null;
-  }, [milestones]);
+  const [now, setNow] = useState(Date.now());
 
-  const stats = useMemo(() => {
-    const total = milestones.length;
-    const completed = milestones.filter(m => m.status === 'completed').length;
-    const percentage = total > 0 ? Math.round((completed / total) * 100) : 0;
-    return { total, completed, percentage };
-  }, [milestones]);
+  useEffect(() => {
+    const interval = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(interval);
+  }, []);
 
   const sortedTimeline = useMemo(() => {
     return [...milestones].sort((a, b) => new Date(a.datetimeISO).getTime() - new Date(b.datetimeISO).getTime());
   }, [milestones]);
 
+  const activeMilestone = useMemo(() => {
+    const future = sortedTimeline.filter(m => m.status !== 'completed' && new Date(m.datetimeISO).getTime() > now);
+    return future[0] || null;
+  }, [sortedTimeline, now]);
+
+  const stats = useMemo(() => {
+    if (milestones.length === 0) return { total: 0, completed: 0, percentage: 0, lastDate: null };
+
+    const sortedByCreated = [...milestones].sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+    const lastEvent = sortedTimeline[sortedTimeline.length - 1];
+
+    const startTime = new Date(sortedByCreated[0].createdAt).getTime();
+    const endTime = new Date(lastEvent.datetimeISO).getTime();
+    const totalDuration = endTime - startTime;
+
+    let percentage = 0;
+    if (totalDuration > 0) {
+      const elapsed = now - startTime;
+      percentage = Math.min(100, Math.max(0, Math.round((elapsed / totalDuration) * 100)));
+    } else {
+      percentage = 100;
+    }
+
+    return {
+      total: milestones.length,
+      completed: milestones.filter(m => m.status === 'completed').length,
+      percentage,
+      lastDate: lastEvent.datetimeISO
+    };
+  }, [milestones, sortedTimeline, now]);
+
   return (
     <div className="space-y-8 animate-in">
       <header className="flex justify-between items-end">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Timeline</h1>
-          <p className="text-gray-500 dark:text-gray-400 text-sm">Your journey progress</p>
+          <h1 className="text-3xl font-bold tracking-tight text-[#1A1C1E] dark:text-white">Timeline</h1>
+          {stats.lastDate && (
+            <p className="text-gray-500 dark:text-gray-400 text-sm">
+              Meta: {formatDate(stats.lastDate)}
+            </p>
+          )}
         </div>
         <div className="text-right">
           <span className="text-2xl font-bold text-[#D84315]">{stats.percentage}%</span>
@@ -443,8 +537,8 @@ const Dashboard = ({ milestones, toggleComplete }: { milestones: Milestone[], to
       </header>
 
       <div className="h-2 w-full bg-gray-100 dark:bg-gray-800 rounded-full overflow-hidden">
-        <div 
-          className="h-full bg-[#D84315] transition-all duration-1000" 
+        <div
+          className="h-full bg-[#D84315] transition-all duration-1000"
           style={{ width: `${stats.percentage}%` }}
         />
       </div>
@@ -474,23 +568,19 @@ const Dashboard = ({ milestones, toggleComplete }: { milestones: Milestone[], to
         {sortedTimeline.map((m) => (
           <div key={m.id} className="flex gap-4 items-start group">
             <div className="flex flex-col items-center">
-              <button 
+              <button
                 onClick={() => toggleComplete(m.id)}
-                className={`w-10 h-10 rounded-full flex items-center justify-center border-2 transition-all ${
-                  m.status === 'completed' 
-                    ? 'bg-green-500 border-green-500 text-white' 
-                    : 'bg-white dark:bg-[#1A1C1E] border-gray-200 dark:border-gray-800 text-gray-400'
-                }`}
+                className={`w-12 h-12 rounded-full flex items-center justify-center transition-all ${m.status === 'completed'
+                  ? 'bg-green-50 dark:bg-green-900/20'
+                  : 'bg-white dark:bg-[#1A1C1E]'
+                  }`}
               >
-                <Icon
-                  name={m.status === 'completed' ? 'check' : m.icon}
-                  className="w-5 h-5"
-                />
+                <MilestoneCircle milestone={m} />
               </button>
               <div className="w-px h-12 bg-gray-200 dark:bg-gray-800 group-last:hidden" />
             </div>
             <div className="flex-1 pt-1">
-              <div className="relative h-24 w-full overflow-hidden rounded-2xl border border-gray-100 dark:border-gray-800 mb-3">
+              <div className="relative h-24 w-full overflow-hidden rounded-2xl border border-gray-100 dark:border-gray-800 mb-2">
                 <img
                   src={getMilestoneImage(m)}
                   alt={m.title}
@@ -501,7 +591,12 @@ const Dashboard = ({ milestones, toggleComplete }: { milestones: Milestone[], to
                 <h4 className={`font-bold ${m.status === 'completed' ? 'text-gray-400 line-through' : ''}`}>
                   {m.title}
                 </h4>
-                <span className="text-[10px] font-bold text-gray-400">{formatDate(m.datetimeISO)}</span>
+                <div className="text-right">
+                  <div className="text-[10px] font-bold text-gray-400">{formatDate(m.datetimeISO)}</div>
+                  <div className="text-[10px] font-bold text-[#D84315]">
+                    {useCountdown(m.datetimeISO).isPast ? 'VENCIDO' : `${useCountdown(m.datetimeISO).days}d left`}
+                  </div>
+                </div>
               </div>
               <p className="text-xs text-gray-500 dark:text-gray-400">{m.description}</p>
             </div>
@@ -513,11 +608,18 @@ const Dashboard = ({ milestones, toggleComplete }: { milestones: Milestone[], to
 };
 
 const Focus = ({ milestones }: { milestones: Milestone[] }) => {
+  const [now, setNow] = useState(Date.now());
+
+  useEffect(() => {
+    const interval = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(interval);
+  }, []);
+
   const activeMilestone = useMemo(() => {
     return milestones
-      .filter(m => m.status !== 'completed' && new Date(m.datetimeISO).getTime() > Date.now())
+      .filter(m => m.status !== 'completed' && new Date(m.datetimeISO).getTime() > now)
       .sort((a, b) => new Date(a.datetimeISO).getTime() - new Date(b.datetimeISO).getTime())[0];
-  }, [milestones]);
+  }, [milestones, now]);
 
   const { days, hours, minutes, seconds, isPast, totalMs } = useCountdown(activeMilestone?.datetimeISO || '');
 
@@ -596,22 +698,35 @@ const Settings = ({ milestones, setMilestones, theme, setTheme }: {
     requestPersist();
   }, []);
 
-  const handleSave = (e: React.FormEvent) => {
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!isEditing) return;
-    
-    setMilestones((prev) => {
-        if (prev.find(m => m.id === isEditing.id)) {
-            return prev.map(m => m.id === isEditing.id ? isEditing : m);
-        }
-        return [...prev, isEditing];
-    });
-    setIsEditing(null);
+
+    try {
+      // Create a copy without the id to avoid saving the Firestore ID inside the document
+      const { id, ...milestoneData } = isEditing;
+
+      if (milestones.find(m => m.id === id)) {
+        const milestoneDoc = doc(db, 'milestones', id);
+        await updateDoc(milestoneDoc, milestoneData);
+      } else {
+        await addDoc(collection(db, 'milestones'), milestoneData);
+      }
+      setIsEditing(null);
+    } catch (error) {
+      console.error("Error saving milestone:", error);
+      alert("Error al guardar el hito. Verifica tu conexión o permisos.");
+    }
   };
 
-  const handleDelete = (id: string) => {
+  const handleDelete = async (id: string) => {
     if (confirm('¿Eliminar este hito?')) {
-      setMilestones((prev) => prev.filter(m => m.id !== id));
+      try {
+        await deleteDoc(doc(db, 'milestones', id));
+      } catch (error) {
+        console.error("Error deleting milestone:", error);
+        alert("Error al eliminar el hito.");
+      }
     }
   };
 
@@ -627,9 +742,15 @@ const Settings = ({ milestones, setMilestones, theme, setTheme }: {
       const data = Array.isArray(parsed) ? parsed : parsed?.milestones;
       if (!Array.isArray(data)) throw new Error('Invalid data');
       const normalized = data.map((item: Partial<Milestone>) => normalizeMilestone(item));
-      setMilestones(normalized);
+
+      // Batch add to Firestore
+      for (const m of normalized) {
+        await addDoc(collection(db, 'milestones'), { ...m });
+      }
+      alert('Importación completada con éxito.');
     } catch (error) {
-      alert('No se pudo importar el archivo. Verifica que sea un backup valido.');
+      console.error("Error importing milestones:", error);
+      alert('No se pudo importar el archivo. Verifica que sea un backup válido.');
     }
   };
 
@@ -680,7 +801,7 @@ const Settings = ({ milestones, setMilestones, theme, setTheme }: {
       <section className="space-y-4">
         <div className="flex justify-between items-center px-1">
           <h3 className="text-xs font-bold uppercase tracking-widest text-gray-400">Milestones</h3>
-          <button 
+          <button
             onClick={() => setIsEditing({
               id: Date.now().toString(),
               title: '',
@@ -730,30 +851,33 @@ const Settings = ({ milestones, setMilestones, theme, setTheme }: {
           <div className="bg-white dark:bg-[#1A1C1E] w-full max-w-sm rounded-[32px] p-8 shadow-2xl animate-in">
             <h2 className="text-2xl font-bold mb-6">Edit Milestone</h2>
             <form onSubmit={handleSave} className="space-y-4">
-              <input 
+              <input
                 required
                 value={isEditing.title}
-                onChange={e => setIsEditing({...isEditing, title: e.target.value})}
+                onChange={e => setIsEditing({ ...isEditing, title: e.target.value })}
                 className="w-full bg-gray-100 dark:bg-gray-800 rounded-xl px-4 py-3 outline-none"
                 placeholder="Title"
               />
               <input
                 value={isEditing.description}
-                onChange={e => setIsEditing({...isEditing, description: e.target.value})}
+                onChange={e => setIsEditing({ ...isEditing, description: e.target.value })}
                 className="w-full bg-gray-100 dark:bg-gray-800 rounded-xl px-4 py-3 outline-none"
                 placeholder="Description"
               />
               <input
                 value={isEditing.imageUrl || ''}
-                onChange={e => setIsEditing({...isEditing, imageUrl: e.target.value})}
+                onChange={e => setIsEditing({ ...isEditing, imageUrl: e.target.value })}
                 className="w-full bg-gray-100 dark:bg-gray-800 rounded-xl px-4 py-3 outline-none"
-                placeholder="Image URL (optional)"
+                placeholder="Ruta imagen (ej: /images/signing.svg)"
               />
+              <p className="text-[10px] text-gray-400 px-2 mt-[-8px]">
+                Imágenes disponibles: signing.svg, medical-review.svg, drug-test.svg, appointment.svg, placeholder.svg
+              </p>
               <input
                 required
                 type="datetime-local"
                 value={isEditing.datetimeISO}
-                onChange={e => setIsEditing({...isEditing, datetimeISO: e.target.value})}
+                onChange={e => setIsEditing({ ...isEditing, datetimeISO: e.target.value })}
                 className="w-full bg-gray-100 dark:bg-gray-800 rounded-xl px-4 py-3 outline-none"
               />
               <div className="flex gap-2">
@@ -769,20 +893,84 @@ const Settings = ({ milestones, setMilestones, theme, setTheme }: {
 };
 
 const App = () => {
-  const [milestones, setMilestones] = useLocalStorage<Milestone[]>(STORAGE_KEYS.MILESTONES, defaultMilestones);
+  const [milestones, setMilestones] = useState<Milestone[]>([]);
   const [theme, setTheme] = useLocalStorage<ThemeMode>(STORAGE_KEYS.THEME, "system");
+  const [loading, setLoading] = useState(true);
 
-  const toggleComplete = useCallback((id: string) => {
-    setMilestones((prev: Milestone[]) => prev.map(m => {
-      if (m.id === id) {
-        return { 
-          ...m, 
-          status: m.status === 'completed' ? 'upcoming' : 'completed' as MilestoneStatus
-        };
+  useEffect(() => {
+    const migrateAndSubscribe = async () => {
+      // 1. Check for migration
+      const migrationFlag = localStorage.getItem('firebase_migrated_v_final');
+      if (!migrationFlag) {
+        const localData = localStorage.getItem(STORAGE_KEYS.MILESTONES);
+        if (localData) {
+          try {
+            const parsed = JSON.parse(localData);
+            if (Array.isArray(parsed) && parsed.length > 0) {
+              for (const m of parsed) {
+                const { id, ...data } = m;
+                await addDoc(collection(db, 'milestones'), data);
+              }
+            }
+          } catch (e) {
+            console.error("Migration error:", e);
+          }
+        }
+        localStorage.setItem('firebase_migrated_v_final', 'true');
       }
-      return m;
-    }));
-  }, [setMilestones]);
+
+      // 2. Subscribe to Firestore
+      const q = query(collection(db, 'milestones'), orderBy('datetimeISO', 'asc'));
+      const unsubscribe = onSnapshot(q, (snapshot) => {
+        const ms = snapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        })) as Milestone[];
+        setMilestones(ms);
+        setLoading(false);
+      }, (error) => {
+        console.error("Firestore snapshot error:", error);
+        setLoading(false);
+      });
+
+      return unsubscribe;
+    };
+
+    let unsubscribe: (() => void) | undefined;
+
+    migrateAndSubscribe().then(unsub => {
+      unsubscribe = unsub;
+    }).catch(err => {
+      console.error("Initialization error:", err);
+      setLoading(false);
+    });
+
+    return () => {
+      if (unsubscribe) unsubscribe();
+    };
+  }, []);
+
+  const toggleComplete = useCallback(async (id: string) => {
+    const milestone = milestones.find(m => m.id === id);
+    if (!milestone) return;
+
+    try {
+      const milestoneDoc = doc(db, 'milestones', id);
+      await updateDoc(milestoneDoc, {
+        status: milestone.status === 'completed' ? 'upcoming' : 'completed'
+      });
+    } catch (error) {
+      console.error("Error toggling completion:", error);
+    }
+  }, [milestones]);
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-[#FDFCFB] dark:bg-[#1A1C1E]">
+        <div className="animate-pulse text-[#D84315] font-bold">Cargando eventos...</div>
+      </div>
+    );
+  }
 
   return (
     <ThemeProvider>
@@ -792,9 +980,9 @@ const App = () => {
             <Route path="/" element={<Dashboard milestones={milestones} toggleComplete={toggleComplete} />} />
             <Route path="/focus" element={<Focus milestones={milestones} />} />
             <Route path="/settings" element={
-              <Settings 
-                milestones={milestones} 
-                setMilestones={setMilestones} 
+              <Settings
+                milestones={milestones}
+                setMilestones={setMilestones}
                 theme={theme}
                 setTheme={setTheme}
               />
@@ -808,6 +996,6 @@ const App = () => {
 
 const container = document.getElementById('root');
 if (container) {
-    const root = createRoot(container);
-    root.render(<App />);
+  const root = createRoot(container);
+  root.render(<App />);
 }
