@@ -33,6 +33,7 @@ const firebaseConfig = {
 
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
+const baseUrl = import.meta.env.BASE_URL;
 
 /** 
  * TYPES 
@@ -84,7 +85,7 @@ const defaultMilestones: Milestone[] = [
     description: 'Central Clinic Lab',
     datetimeISO: new Date(Date.now() + 86400000 * 2).toISOString().slice(0, 16),
     icon: 'medical_services',
-    imageUrl: '/images/drug-test.svg',
+    imageUrl: `${baseUrl}images/drug-test.svg`,
     status: 'upcoming',
     createdAt: new Date().toISOString()
   },
@@ -94,7 +95,7 @@ const defaultMilestones: Milestone[] = [
     description: 'Sede Principal - Piso 4',
     datetimeISO: new Date(Date.now() + 86400000 * 7).toISOString().slice(0, 16),
     icon: 'description',
-    imageUrl: '/images/medical-review.svg',
+    imageUrl: `${baseUrl}images/medical-review.svg`,
     status: 'upcoming',
     createdAt: new Date().toISOString()
   },
@@ -104,7 +105,7 @@ const defaultMilestones: Milestone[] = [
     description: 'Notaría Central',
     datetimeISO: '2026-02-09T10:00',
     icon: 'history_edu',
-    imageUrl: '/images/signing.svg',
+    imageUrl: `${baseUrl}images/signing.svg`,
     status: 'upcoming',
     createdAt: new Date().toISOString()
   },
@@ -114,7 +115,7 @@ const defaultMilestones: Milestone[] = [
     description: 'Asignación final',
     datetimeISO: '2026-02-13T08:00',
     icon: 'event_available',
-    imageUrl: '/images/appointment.svg',
+    imageUrl: `${baseUrl}images/appointment.svg`,
     status: 'upcoming',
     createdAt: new Date().toISOString()
   }
@@ -174,9 +175,15 @@ const formatDate = (iso: string) => {
   }).format(new Date(iso));
 };
 
-const fallbackImageUrl = '/images/placeholder.svg';
-const getMilestoneImage = (milestone: Milestone) =>
-  milestone.imageUrl || fallbackImageUrl;
+const fallbackImageUrl = `${baseUrl}images/placeholder.svg`;
+const resolveImageUrl = (url?: string) => {
+  if (!url) return fallbackImageUrl;
+  if (/^(https?:|data:)/i.test(url)) return url;
+  if (url.startsWith(baseUrl)) return url;
+  if (url.startsWith('/')) return `${baseUrl}${url.slice(1)}`;
+  return `${baseUrl}${url.replace(/^\.\//, '')}`;
+};
+const getMilestoneImage = (milestone: Milestone) => resolveImageUrl(milestone.imageUrl);
 
 const normalizeMilestone = (input: Partial<Milestone>): Milestone => ({
   id: input.id || Date.now().toString(),
@@ -184,7 +191,7 @@ const normalizeMilestone = (input: Partial<Milestone>): Milestone => ({
   description: input.description || '',
   datetimeISO: input.datetimeISO || '',
   icon: (input.icon || 'flag') as IconName,
-  imageUrl: input.imageUrl || fallbackImageUrl,
+  imageUrl: resolveImageUrl(input.imageUrl),
   status: (input.status || 'upcoming') as MilestoneStatus,
   createdAt: input.createdAt || new Date().toISOString()
 });
