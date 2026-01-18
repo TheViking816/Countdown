@@ -1,5 +1,6 @@
 /// <reference types="vite/client" />
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import './index.css';
 import { createRoot } from 'react-dom/client';
 import {
   HashRouter as Router,
@@ -33,7 +34,8 @@ const firebaseConfig = {
 
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
-const baseUrl = import.meta.env.BASE_URL;
+
+const assetBase = (import.meta.env.BASE_URL || '/').replace(/\/?$/, '/');
 
 /** 
  * TYPES 
@@ -85,7 +87,7 @@ const defaultMilestones: Milestone[] = [
     description: 'Central Clinic Lab',
     datetimeISO: new Date(Date.now() + 86400000 * 2).toISOString().slice(0, 16),
     icon: 'medical_services',
-    imageUrl: `${baseUrl}images/drug-test.svg`,
+    imageUrl: 'images/drug-test.svg',
     status: 'upcoming',
     createdAt: new Date().toISOString()
   },
@@ -95,7 +97,7 @@ const defaultMilestones: Milestone[] = [
     description: 'Sede Principal - Piso 4',
     datetimeISO: new Date(Date.now() + 86400000 * 7).toISOString().slice(0, 16),
     icon: 'description',
-    imageUrl: `${baseUrl}images/medical-review.svg`,
+    imageUrl: 'images/medical-review.svg',
     status: 'upcoming',
     createdAt: new Date().toISOString()
   },
@@ -105,7 +107,7 @@ const defaultMilestones: Milestone[] = [
     description: 'Notaría Central',
     datetimeISO: '2026-02-09T10:00',
     icon: 'history_edu',
-    imageUrl: `${baseUrl}images/signing.svg`,
+    imageUrl: 'images/signing.svg',
     status: 'upcoming',
     createdAt: new Date().toISOString()
   },
@@ -115,7 +117,7 @@ const defaultMilestones: Milestone[] = [
     description: 'Asignación final',
     datetimeISO: '2026-02-13T08:00',
     icon: 'event_available',
-    imageUrl: `${baseUrl}images/appointment.svg`,
+    imageUrl: 'images/appointment.svg',
     status: 'upcoming',
     createdAt: new Date().toISOString()
   }
@@ -175,13 +177,18 @@ const formatDate = (iso: string) => {
   }).format(new Date(iso));
 };
 
-const fallbackImageUrl = `${baseUrl}images/placeholder.svg`;
+const fallbackImageUrl = 'images/placeholder.svg';
 const resolveImageUrl = (url?: string) => {
-  if (!url) return fallbackImageUrl;
-  if (/^(https?:|data:)/i.test(url)) return url;
-  if (url.startsWith(baseUrl)) return url;
-  if (url.startsWith('/')) return `${baseUrl}${url.slice(1)}`;
-  return `${baseUrl}${url.replace(/^\.\//, '')}`;
+  if (!url) return `${assetBase}${fallbackImageUrl}`;
+
+  const trimmed = url.trim();
+  if (!trimmed) return `${assetBase}${fallbackImageUrl}`;
+  if (/^(https?:|data:)/i.test(trimmed)) return trimmed;
+  if (trimmed.startsWith(assetBase)) return trimmed;
+
+  const withoutLeading = trimmed.replace(/^\.\//, '').replace(/^\/+/, '');
+  const withFolder = withoutLeading.includes('/') ? withoutLeading : `images/${withoutLeading}`;
+  return `${assetBase}${withFolder}`;
 };
 const getMilestoneImage = (milestone: Milestone) => resolveImageUrl(milestone.imageUrl);
 
@@ -191,7 +198,7 @@ const normalizeMilestone = (input: Partial<Milestone>): Milestone => ({
   description: input.description || '',
   datetimeISO: input.datetimeISO || '',
   icon: (input.icon || 'flag') as IconName,
-  imageUrl: resolveImageUrl(input.imageUrl),
+  imageUrl: input.imageUrl || fallbackImageUrl,
   status: (input.status || 'upcoming') as MilestoneStatus,
   createdAt: input.createdAt || new Date().toISOString()
 });
@@ -875,7 +882,7 @@ const Settings = ({ milestones, setMilestones, theme, setTheme }: {
                 value={isEditing.imageUrl || ''}
                 onChange={e => setIsEditing({ ...isEditing, imageUrl: e.target.value })}
                 className="w-full bg-gray-100 dark:bg-gray-800 rounded-xl px-4 py-3 outline-none"
-                placeholder="Ruta imagen (ej: /images/signing.svg)"
+                placeholder="Ruta imagen (ej: images/signing.svg o signing.svg)"
               />
               <p className="text-[10px] text-gray-400 px-2 mt-[-8px]">
                 Imágenes disponibles: signing.svg, medical-review.svg, drug-test.svg, appointment.svg, placeholder.svg
