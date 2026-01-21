@@ -494,7 +494,7 @@ const Dashboard = ({ milestones, toggleComplete }: { milestones: Milestone[], to
   const [now, setNow] = useState(Date.now());
 
   useEffect(() => {
-    const interval = setInterval(() => setNow(Date.now()), 1000);
+    const interval = setInterval(() => setNow(Date.now()), 100);
     return () => clearInterval(interval);
   }, []);
 
@@ -520,7 +520,7 @@ const Dashboard = ({ milestones, toggleComplete }: { milestones: Milestone[], to
     let percentage = 0;
     if (totalDuration > 0) {
       const elapsed = now - startTime;
-      percentage = Math.min(100, Math.max(0, Math.round((elapsed / totalDuration) * 100)));
+      percentage = Math.min(100, Math.max(0, (elapsed / totalDuration) * 100));
     } else {
       percentage = 100;
     }
@@ -545,7 +545,7 @@ const Dashboard = ({ milestones, toggleComplete }: { milestones: Milestone[], to
           )}
         </div>
         <div className="text-right">
-          <span className="text-2xl font-bold text-[#D84315]">{stats.percentage}%</span>
+          <span className="text-2xl font-bold text-[#D84315]">{stats.percentage.toFixed(2)}%</span>
           <p className="text-[10px] uppercase font-bold tracking-tighter text-gray-400">Completed</p>
         </div>
       </header>
@@ -625,7 +625,7 @@ const Focus = ({ milestones }: { milestones: Milestone[] }) => {
   const [now, setNow] = useState(Date.now());
 
   useEffect(() => {
-    const interval = setInterval(() => setNow(Date.now()), 1000);
+    const interval = setInterval(() => setNow(Date.now()), 100);
     return () => clearInterval(interval);
   }, []);
 
