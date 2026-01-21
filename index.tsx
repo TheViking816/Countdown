@@ -457,11 +457,11 @@ const MilestoneCircle = ({ milestone }: { milestone: Milestone }) => {
       percentage={percentage}
       size={40}
       strokeWidth={3}
-      color={isPast ? "#FF8A65" : "#D84315"}
+      color={milestone.status === 'completed' ? "#9CA3AF" : (isPast ? "#FF8A65" : "#D84315")}
     >
       <Icon
         name={milestone.status === 'completed' ? 'check' : milestone.icon}
-        className={`w-4 h-4 ${milestone.status === 'completed' ? 'text-green-500' : ''}`}
+        className={`w-6 h-6 ${milestone.status === 'completed' ? 'text-green-600' : ''}`}
       />
     </ProgressCircle>
   );
@@ -585,7 +585,7 @@ const Dashboard = ({ milestones, toggleComplete }: { milestones: Milestone[], to
               <button
                 onClick={() => toggleComplete(m.id)}
                 className={`w-12 h-12 rounded-full flex items-center justify-center transition-all ${m.status === 'completed'
-                  ? 'bg-green-50 dark:bg-green-900/20'
+                  ? 'bg-gray-100 dark:bg-gray-800'
                   : 'bg-white dark:bg-[#1A1C1E]'
                   }`}
               >
@@ -598,7 +598,7 @@ const Dashboard = ({ milestones, toggleComplete }: { milestones: Milestone[], to
                 <img
                   src={getMilestoneImage(m)}
                   alt={m.title}
-                  className="w-full h-full object-cover"
+                  className={`w-full h-full object-cover ${m.status === 'completed' ? 'grayscale opacity-60' : ''}`}
                 />
               </div>
               <div className="flex justify-between items-start">
@@ -612,7 +612,7 @@ const Dashboard = ({ milestones, toggleComplete }: { milestones: Milestone[], to
                   </div>
                 </div>
               </div>
-              <p className="text-xs text-gray-500 dark:text-gray-400">{m.description}</p>
+              <p className={`text-xs ${m.status === 'completed' ? 'text-gray-400' : 'text-gray-500 dark:text-gray-400'}`}>{m.description}</p>
             </div>
           </div>
         ))}
